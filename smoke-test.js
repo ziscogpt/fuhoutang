@@ -66,6 +66,14 @@ routeNames.filter(n => !homes.has(n)).forEach(n => {
 });
 console.log('  ✓ 检查完毕');
 
+console.log('— 流转表抽查 —');
+[
+  ['14 问一问有"问先生"入口', routes.ask([], {}).includes("go('sir')")],
+  ['03 舆图田字格通往 08 离园态', routes.map([], {}).includes("go('leave')")],
+  ['13 电子书有"这一册也能听"→22', routes.book([], {}).includes('这一册也能听')],
+  ['20 问先生有"没写过"常驻提示', routes.sir([], {}).includes('不敢替古人妄言')],
+].forEach(([name, ok]) => { if (!ok) fail++; console.log(`  ${ok ? '✓' : '✗'} ${name}`); });
+
 console.log('— 问答引擎 —');
 const qaHit = DATA.qa.find(i => i.keys.some(k => '他为什么不让孩子穿好衣服?'.includes(k)));
 console.log(qaHit ? '  ✓ 问一问命中示例问题' : '  ✗ 问一问未命中示例问题') || (qaHit || fail++);

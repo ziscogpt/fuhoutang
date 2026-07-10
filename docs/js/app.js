@@ -23,7 +23,7 @@ function defaultState() {
     sealMatched: false,      // 对印
     qiciChoice: null,
     bookPlain: false,        // 电子书 原文/白话
-    svcOpen: false,          // 服务栏展开
+    svcOpen: true,           // 服务栏展开(01 屏默认展开,可收起)
   };
 }
 
@@ -480,7 +480,7 @@ routes.map = () => {
     <div style="display:flex; align-items:flex-end; gap:9px;">
       <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
         <span style="font-size:12px; color:var(--mut); padding:4px 2px; cursor:pointer;" onclick="go('me')">我的</span>
-        <div style="display:flex; align-items:flex-end; gap:9px;">
+        <div style="display:flex; align-items:flex-end; gap:9px; cursor:pointer;" onclick="go('leave')">
           ${tian(46, 38)}
           <span style="font-size:11px; color:var(--ink2); writing-mode:vertical-rl; letter-spacing:2px; padding-bottom:2px;">${zhuoLabel()}</span>
         </div>
@@ -823,6 +823,14 @@ routes.book = () => {
     <div style="flex:1; text-align:center; padding:11px 0; font-size:13px; border-left:1.5px solid var(--ink); cursor:pointer;" onclick="App.bookNav(1)">下一篇 ›</div>
   </div>
 
+  <div style="margin:10px 20px 0 20px; border:1.5px solid var(--ink); display:flex; align-items:center; cursor:pointer;" onclick="go('study')">
+    <div style="width:40px; align-self:stretch; border-right:1.5px solid var(--ink); display:flex; align-items:center; justify-content:center;"><span style="width:0; height:0; border-left:11px solid var(--ink); border-top:7px solid transparent; border-bottom:7px solid transparent; margin-left:3px;"></span></div>
+    <div style="flex:1; padding:9px 12px; display:flex; justify-content:space-between; align-items:center;">
+      <div><span style="font-size:13px; font-weight:600;">这一册也能听</span><span style="font-size:11px; color:var(--mut); margin-left:8px;">每周一封 · 后台续播</span></div>
+      <span style="font-size:10px; color:var(--faint);">播客 App 同步 →</span>
+    </div>
+  </div>
+
   <div style="margin:10px 20px 0 20px; border:1.5px solid var(--ink); display:flex; align-items:stretch;">
     <div style="flex:1; padding:12px 14px; border-right:1.5px solid var(--ink);">
       <div style="font-size:13px; font-weight:600;">这一册的纸书</div>
@@ -843,8 +851,11 @@ routes.ask = () => `
   ${capsule()}
   <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback">
-    <div class="h-title" style="font-size:26px;">问一问</div>
-    <span style="font-size:11px; color:var(--faint); cursor:pointer;" onclick="go('sir')">白话作答 · 句句有出处 · 也可换"问先生" →</span>
+    <div>
+      <div class="h-title" style="font-size:26px;">问一问</div>
+      <div style="margin-top:6px; font-size:11px; color:var(--faint);">白话作答 · 句句有出处</div>
+    </div>
+    <span style="border:1.5px solid var(--ink); padding:8px 14px; font-size:13px; cursor:pointer; white-space:nowrap;" onclick="go('sir')">换"问先生" →</span>
   </div>
   <div id="chatbox" class="chat" style="flex:1; overflow-y:auto;">
     ${chats.qa.length ? chats.qa.join('') : `<div class="chips">${DATA.qaChips.map(c => `<span onclick="App.ask('qa', '${c}')">${c}</span>`).join('')}</div>`}
@@ -871,7 +882,8 @@ routes.sir = () => `
     </div>
   </div>
   <div id="chatbox" class="chat" style="flex:1; overflow-y:auto;">
-    ${chats.sir.length ? chats.sir.join('') : `<div class="chips">${DATA.sirChips.map(c => `<span onclick="App.ask('sir', '${c}')">${c}</span>`).join('')}</div>`}
+    ${chats.sir.length ? chats.sir.join('') : `<div class="chips">${DATA.sirChips.map(c => `<span onclick="App.ask('sir', '${c}')">${c}</span>`).join('')}</div>
+    <div style="align-self:flex-start; max-width:310px; border:1px dashed rgba(38,36,29,.4); padding:10px 14px; font-size:12px; color:var(--mut); line-height:1.8;">若问的事他没写过,他答:"这事,我信里没有写过,不敢替古人妄言。"</div>`}
   </div>
   <div class="askbar">
     <input id="askinput" placeholder="跟先生说件事" onkeydown="if(event.key==='Enter')App.ask('sir')">
