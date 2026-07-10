@@ -6,9 +6,10 @@ const fakeEl = () => ({
   querySelector: () => fakeEl(), insertAdjacentHTML(){}, style: {},
   textContent: '', dataset: {}, value: '',
 });
-global.window = { addEventListener(){}, scrollTo(){} };
+global.window = { addEventListener(){}, scrollTo(){}, scrollY: 0 };
 global.document = { getElementById: () => fakeEl() };
-global.location = { hash: '', href: '' };
+global.location = { hash: '', href: '', replace(){} };
+global.history = { back(){} };
 global.localStorage = { _d: {}, getItem(k){ return this._d[k] || null; }, setItem(k,v){ this._d[k]=v; }, removeItem(k){ delete this._d[k]; } };
 global.navigator = {};
 global.confirm = () => false;
@@ -53,6 +54,17 @@ S.sealMatched = true;
 S.mode = 'post';
 S.owned.shouzhairen = true; S.owned.qici = true; S.qiciChoice = 'A';
 routeNames.forEach(n => (paramsFor[n] || [[]]).forEach(p => tryRender(n, p)));
+
+console.log('— 返回能力:除三个"家"以外,每页都要有返回入口 —');
+const homes = new Set(['landing', 'map', 'home']);
+routeNames.filter(n => !homes.has(n)).forEach(n => {
+  (paramsFor[n] || [[]]).forEach(p => {
+    const html = routes[n](p, {});
+    const ok = /App\.back\(|go\('map'\)|go\('study'\)/.test(html);
+    if (!ok) { fail++; console.log(`  ✗ ${n}(${p.join(',')}) 没有返回入口`); }
+  });
+});
+console.log('  ✓ 检查完毕');
 
 console.log('— 问答引擎 —');
 const qaHit = DATA.qa.find(i => i.keys.some(k => '他为什么不让孩子穿好衣服?'.includes(k)));

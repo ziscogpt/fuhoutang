@@ -114,6 +114,17 @@ function serviceBar() {
 const routes = {};
 function go(hash) { location.hash = hash; }
 
+/* 自维护导航栈:让每一页都退得回去。
+   - App.back(fallback):有来路就退一步;没有来路(直接打开的分享链接)退到兜底页。
+   - goReplace:替换当前历史(入园、支付成功),避免"返回"回到落地页/已付款的下单页。 */
+let navStack = [location.hash || '#'];
+let replaceNext = false;
+function goReplace(hash) {
+  replaceNext = true;
+  location.replace(location.href.split('#')[0] + '#' + hash);
+}
+function homeRoute() { return S.mode === 'park' ? 'map' : 'home'; }
+
 function render() {
   clearAudio();
   let h = location.hash.replace(/^#\/?/, '');
@@ -134,7 +145,25 @@ function parseQuery(h) {
   if (i >= 0) h.slice(i + 1).split('&').forEach(kv => { const [k, v] = kv.split('='); q[k] = decodeURIComponent(v || ''); });
   return q;
 }
-window.addEventListener('hashchange', render);
+
+/* 页内动作后的重渲染:保持滚动位置,不跳回页首 */
+function rerender() {
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
+
+window.addEventListener('hashchange', () => {
+  const h = location.hash || '#';
+  const top = navStack[navStack.length - 1];
+  if (replaceNext) { replaceNext = false; navStack[navStack.length - 1] = h; }
+  else if (navStack.length >= 2 && navStack[navStack.length - 2] === h) navStack.pop(); // 后退(含系统返回键)
+  else if (top !== h) navStack.push(h);
+  render();
+});
+
+/* 问答对话(会话内暂存:跳去出处页再回来,话还在;关掉页面即散,不留档) */
+const chats = { qa: [], sir: [] };
 
 /* ───────── 音频模拟 ───────── */
 let audioTimers = {};
@@ -143,14 +172,25 @@ function parseDur(s) { const m = s.match(/(\d+)′(\d+)″/); return m ? (+m[1])
 
 /* ───────── 交互动作 ───────── */
 const App = {
-  svcToggle() { S.svcOpen = !S.svcOpen; save(); render(); },
+  /* 返回:优先退回来路;直接打开的链接没有来路,退到兜底页(默认当前状态的家) */
+  back(fallback) {
+    if (navStack.length > 1) history.back();
+    else go(fallback || homeRoute());
+  },
+
+  /* 服务栏开合只更新自身,不重渲染整页(保住正在写的信、聊天记录、播放进度) */
+  svcToggle() {
+    S.svcOpen = !S.svcOpen; save();
+    const sb = document.getElementById('servicebar');
+    if (sb) sb.outerHTML = serviceBar();
+  },
   svc(k) { toast(DATA.services[k]); },
   call() { toast(`拨打 ${DATA.phone} …`); setTimeout(() => { location.href = 'tel:0738'; }, 400); },
 
   enter() {
     S.entered = true; S.mode = 'park';
     if (!S.enterDate) S.enterDate = new Date().toISOString();
-    save(); go('map');
+    save(); goReplace('map'); // 落地页只走一次,返回不再回到它
   },
 
   checkin(id) {
@@ -158,7 +198,7 @@ const App = {
       S.visited.push(id); save();
       const z = zhuoCount();
       toast(z >= 8 ? '八笔写满了。这个字,是走出来的。' : `你走到了。「拙」字添了一笔,共${DATA.zNums[z]}笔。`);
-      render();
+      rerender();
     }
   },
 
@@ -190,7 +230,7 @@ const App = {
   rike(i) {
     const k = S.rikeDone.indexOf(i);
     if (k >= 0) S.rikeDone.splice(k, 1); else { S.rikeDone.push(i); }
-    save(); render();
+    save(); rerender();
   },
 
   /* 百日课 */
@@ -204,7 +244,7 @@ const App = {
       S.bairi.log[d] = true; save();
       const pi = DATA.bairiPishu[d % DATA.bairiPishu.length];
       toast('先生批:' + pi.replace(/^.*批[::,]/, ''));
-      render();
+      rerender();
     }
   },
 
@@ -238,9 +278,9 @@ const App = {
   bookNav(d) {
     const n = S.reading.idx + d;
     if (n < 0 || n >= DATA.book.pages.length) { toast(d > 0 ? '示例数据到这页为止' : '前面没有了'); return; }
-    S.reading.idx = n; save(); render();
+    S.reading.idx = n; save(); rerender();
   },
-  bookPlainToggle() { S.bookPlain = !S.bookPlain; save(); render(); },
+  bookPlainToggle() { S.bookPlain = !S.bookPlain; save(); rerender(); },
 
   /* 支付(演示) */
   pay(amount, title, after) {
@@ -267,11 +307,11 @@ const App = {
         const d = new Date();
         l.dates = [0, 1, 2].map(i => { const x = new Date(d.getTime() + i * 86400000); return cnDate(x); });
       }
-      save(); go('sent');
-    } else if (after === 'shouzhairen') { S.owned.shouzhairen = true; save(); render(); toast('全季已解锁'); }
-    else if (after === 'qici') { S.owned.qici = true; save(); render(); toast('全本已解锁'); }
+      save(); goReplace('sent'); // 顶掉下单页,返回不会退回已付款的表单
+    } else if (after === 'shouzhairen') { S.owned.shouzhairen = true; save(); rerender(); toast('全季已解锁'); }
+    else if (after === 'qici') { S.owned.qici = true; save(); rerender(); toast('全本已解锁'); }
     else if (after === 'goods') { save(); toast('已下单。出园结账,也可寄到家。'); go('orders'); }
-    else { save(); render(); toast('已付'); }
+    else { save(); rerender(); toast('已付'); }
   },
 
   checkoutPay(type) {
@@ -292,7 +332,7 @@ const App = {
 
   /* 对印 */
   matchSeal() {
-    if (!S.sealMatched) { S.sealMatched = true; save(); render(); toast('对上了。两个半印合成一方。'); }
+    if (!S.sealMatched) { S.sealMatched = true; save(); rerender(); toast('对上了。两个半印合成一方。'); }
   },
   duiyinSend() {
     const ta = document.getElementById('lettertext');
@@ -310,7 +350,7 @@ const App = {
     save(); toast('先存着。在「我的 · 我的信」里。');
   },
 
-  monthlyToggle() { S.monthlyOn = !S.monthlyOn; save(); render(); toast(S.monthlyOn ? '已订 · 每月初一送达' : '已关 · 随时可再订'); },
+  monthlyToggle() { S.monthlyOn = !S.monthlyOn; save(); rerender(); toast(S.monthlyOn ? '已订 · 每月初一送达' : '已关 · 随时可再订'); },
 
   /* 问一问 / 问先生 */
   ask(kind, preset) {
@@ -319,7 +359,9 @@ const App = {
     if (!q) return;
     if (input) input.value = '';
     const box = document.getElementById('chatbox');
-    box.insertAdjacentHTML('beforeend', `<div class="bub-me">${esc(q)}</div>`);
+    const meHtml = `<div class="bub-me">${esc(q)}</div>`;
+    chats[kind].push(meHtml);
+    box.insertAdjacentHTML('beforeend', meHtml);
     const pool = kind === 'sir' ? DATA.sir : DATA.qa;
     const hit = pool.find(item => item.keys.some(k => q.includes(k)));
     setTimeout(() => {
@@ -336,13 +378,14 @@ const App = {
         const miss = kind === 'sir' ? DATA.sirMiss : DATA.qaMiss;
         html = `<div class="bub-ai" style="border-style:dashed; border-color:rgba(38,36,29,.4);"><div class="ba-text" style="color:var(--mut); font-size:12px;">${kind === 'sir' ? '"' + miss + '"' : miss}</div></div>`;
       }
+      chats[kind].push(html);
       box.insertAdjacentHTML('beforeend', html);
       box.lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 350);
   },
 
   qiciChoose(c) {
-    S.qiciChoice = c; save(); render();
+    S.qiciChoice = c; save(); rerender();
   },
 
   playEp(name, locked) {
@@ -364,9 +407,9 @@ const App = {
     save(); go(S.mode === 'park' ? 'map' : 'home');
     toast(S.mode === 'park' ? '演示:你回到了园中' : '演示:你已离园。首页换成行后状态。');
   },
-  demoDay() { S.demoDayOffset += 1; save(); render(); toast('演示:时间快进一天'); },
+  demoDay() { S.demoDayOffset += 1; save(); rerender(); toast('演示:时间快进一天'); },
   demoWalkAll() {
-    S.visited = PLACE_ORDER.slice(); save(); render(); toast('演示:八处走满');
+    S.visited = PLACE_ORDER.slice(); save(); rerender(); toast('演示:八处走满');
   },
   demoReset() {
     if (confirm('清空全部体验数据,从门口重新开始?')) {
@@ -546,7 +589,8 @@ routes.menfang = () => {
 routes.letter = () => `
 <div class="page">
   ${capsule()}
-  <div class="pagehead">
+  <div class="back" onclick="App.back('map')">‹ 返回</div>
+  <div class="pagehead afterback">
     <div class="h-title">说件小事</div>
     <span class="h-part">家与信之部</span>
   </div>
@@ -588,7 +632,8 @@ routes.day = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="pagehead">
+  <div class="back" onclick="App.back('map')">‹ 返回</div>
+  <div class="pagehead afterback">
     <div class="h-title">试一天</div>
     <span class="h-part">日课之部</span>
   </div>
@@ -616,7 +661,7 @@ routes.bairi = () => {
     return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback"><div class="h-title">百日课</div></div>
   <div class="lede">每天一条他的原文,共一百天。断了不清零,不提醒,不排名。</div>
   <div style="margin:24px 20px 0 20px;" class="btn-ink" onclick="App.bairiOn()">订 · 从今天起</div>
@@ -640,7 +685,7 @@ routes.bairi = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback">
     <div class="h-title">百日课</div>
     <span class="mono" style="font-size:12px; color:var(--mut);">第${cnNum(day)}天</span>
@@ -708,7 +753,7 @@ routes.source = (params) => {
     return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback"><div class="h-title" style="font-size:24px;">这条记录</div></div>
   <div class="lede">记录号 ${esc(recNo || '')} 在示例库里还没有收录全文。正式版逐条可查。</div>
   <div class="spacer"></div>${colophon()}
@@ -717,7 +762,7 @@ routes.source = (params) => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div style="padding:24px 20px 0 20px;">
     <div class="h-title" style="font-size:24px; letter-spacing:2px;">${rec.title}</div>
     <div class="mono" style="margin-top:8px; font-size:11px; color:var(--faint);">记录号 ${recNo}</div>
@@ -796,13 +841,13 @@ routes.book = () => {
 routes.ask = () => `
 <div class="page" style="padding-bottom:0;">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback">
     <div class="h-title" style="font-size:26px;">问一问</div>
     <span style="font-size:11px; color:var(--faint); cursor:pointer;" onclick="go('sir')">白话作答 · 句句有出处 · 也可换"问先生" →</span>
   </div>
   <div id="chatbox" class="chat" style="flex:1; overflow-y:auto;">
-    <div class="chips">${DATA.qaChips.map(c => `<span onclick="App.ask('qa', '${c}')">${c}</span>`).join('')}</div>
+    ${chats.qa.length ? chats.qa.join('') : `<div class="chips">${DATA.qaChips.map(c => `<span onclick="App.ask('qa', '${c}')">${c}</span>`).join('')}</div>`}
   </div>
   <div class="askbar">
     <input id="askinput" placeholder="接着问" onkeydown="if(event.key==='Enter')App.ask('qa')">
@@ -815,7 +860,7 @@ routes.ask = () => `
 routes.sir = () => `
 <div class="page" style="padding-bottom:0;">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 回去</div>
+  <div class="back" onclick="App.back('ask')">‹ 回去</div>
   <div style="padding:20px 20px 0 20px; display:flex; align-items:center; gap:14px;">
     <div style="width:64px; height:80px; flex:none; border:1.5px solid var(--ink); background:repeating-linear-gradient(0deg, transparent 0 10px, rgba(38,36,29,.12) 10px 11px); display:flex; align-items:center; justify-content:center;">
       <span class="mono" style="font-size:9px; color:var(--mut); text-align:center;">白描<br>坐像</span>
@@ -826,7 +871,7 @@ routes.sir = () => `
     </div>
   </div>
   <div id="chatbox" class="chat" style="flex:1; overflow-y:auto;">
-    <div class="chips">${DATA.sirChips.map(c => `<span onclick="App.ask('sir', '${c}')">${c}</span>`).join('')}</div>
+    ${chats.sir.length ? chats.sir.join('') : `<div class="chips">${DATA.sirChips.map(c => `<span onclick="App.ask('sir', '${c}')">${c}</span>`).join('')}</div>`}
   </div>
   <div class="askbar">
     <input id="askinput" placeholder="跟先生说件事" onkeydown="if(event.key==='Enter')App.ask('sir')">
@@ -839,7 +884,8 @@ routes.sir = () => `
 routes.shop = () => `
 <div class="page">
   ${capsule()}
-  <div class="pagehead">
+  <div class="back" onclick="App.back()">‹ 返回</div>
+  <div class="pagehead afterback">
     <div class="h-title">铺子</div>
     <span style="font-size:12px; color:var(--mut);">出园结账,也可寄到家</span>
   </div>
@@ -877,7 +923,7 @@ routes.qici = () => {
       <div class="serif" style="font-size:26px; font-weight:900; color:var(--bg); letter-spacing:4px;">七次</div>
       <div style="margin-top:6px; font-size:12px; color:var(--dim);">${q.ep}</div>
     </div>
-    <div style="position:absolute; top:60px; left:20px; font-size:13px; color:var(--dim); cursor:pointer;" onclick="history.back()">‹ 回去</div>
+    <div style="position:absolute; top:60px; left:20px; font-size:13px; color:var(--dim); cursor:pointer;" onclick="App.back('study')">‹ 回去</div>
   </div>
 
   <div style="padding:22px 20px 0 20px;">
@@ -932,7 +978,7 @@ routes.shouzhairen = () => {
   ${capsule()}
   <div style="height:250px; position:relative; background:repeating-linear-gradient(45deg, rgba(38,36,29,.08) 0 8px, transparent 8px 16px); border-bottom:2px solid var(--ink); display:flex; align-items:center; justify-content:center;">
     <span class="mono" style="font-size:10px; color:var(--mut);">剧照 · 老周在藏书楼上锁</span>
-    <div style="position:absolute; top:60px; left:20px; font-size:13px; color:var(--mut); cursor:pointer;" onclick="history.back()">‹ 回去</div>
+    <div style="position:absolute; top:60px; left:20px; font-size:13px; color:var(--mut); cursor:pointer;" onclick="App.back('study')">‹ 回去</div>
     <div style="position:absolute; left:20px; bottom:20px;">
       <div class="serif" style="font-size:30px; font-weight:900; letter-spacing:4px;">守宅人</div>
       <div style="margin-top:6px; font-size:12px; color:var(--ink2);">纪实短剧 · 六集 · 每集十二分钟</div>
@@ -954,7 +1000,7 @@ routes.duiyin = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div style="padding:20px 20px 0 20px;">
     <div class="h-title">${matched ? '对上了' : '对印'}</div>
     <div style="margin-top:8px; font-size:13px; color:var(--ink2);">${matched ? '两个半印合成一方。它的最后一次用处:再寄一封。' : '你的半印随身带着,另一半在馆里。对上它,再寄一封。'}</div>
@@ -997,7 +1043,8 @@ routes.duiyin = () => {
 routes.monthly = () => `
 <div class="page">
   ${capsule()}
-  <div class="pagehead">
+  <div class="back" onclick="App.back('study')">‹ 返回</div>
+  <div class="pagehead afterback">
     <div class="h-title">每月读半封</div>
     <span class="mono" style="font-size:12px; color:var(--mut);">${DATA.monthly.issue}</span>
   </div>
@@ -1026,7 +1073,7 @@ routes.card = () => {
     return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;">
     ${tian(150, 124)}
     <div style="font-size:13px; color:var(--ink2);">${zhuoLabel()} · 还差${DATA.zNums[8 - zhuoCount()]}笔</div>
@@ -1037,7 +1084,7 @@ routes.card = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div style="flex:1; display:flex; align-items:center; justify-content:center;">
     <div style="width:252px; background:var(--paper); border:2px solid var(--ink); padding:5px;">
       <div style="border:1px solid var(--ink); display:flex; flex-direction:column; align-items:center; padding:36px 22px 20px 22px;">
@@ -1063,7 +1110,7 @@ routes.card = () => {
 routes.kids = () => `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 回去</div>
+  <div class="back" onclick="App.back('map')">‹ 回去</div>
   <div style="padding:24px 20px 0 20px;">
     <div class="h-title" style="font-size:30px;">任务卡</div>
     <div style="margin-top:8px; font-size:13px; color:var(--ink2);">做完一件,找穿蓝褂子的工作人员盖个小印。</div>
@@ -1163,7 +1210,8 @@ routes.study = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="pagehead">
+  <div class="back" onclick="App.back()">‹ 返回</div>
+  <div class="pagehead afterback">
     <div>
       <div class="h-title">书房</div>
       <div style="margin-top:8px; font-size:13px; color:var(--ink2);">读的、听的、看的,都从同一部全集里来。</div>
@@ -1229,7 +1277,7 @@ routes.checkout = (params, q) => {
   return `
 <div class="page">
   ${capsule()}
-  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="history.back()">
+  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="App.back()">
     <span style="font-size:20px;">‹</span><span style="font-size:16px; font-weight:600;">由富厚堂代寄</span>
   </div>
 
@@ -1276,7 +1324,7 @@ routes.sent = () => {
     return `
 <div class="page">
   ${capsule()}
-  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="history.back()">
+  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="App.back()">
     <span style="font-size:20px;">‹</span><span style="font-size:16px; font-weight:600;">你寄的信</span>
   </div>
   <div class="lede" style="margin-top:20px;">还没有信。在园里「说件小事」,或回家后「对印」,都能写。</div>
@@ -1287,7 +1335,7 @@ routes.sent = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="history.back()">
+  <div style="padding:60px 20px 0 20px; display:flex; align-items:center; gap:12px; cursor:pointer;" onclick="App.back()">
     <span style="font-size:20px;">‹</span><span style="font-size:16px; font-weight:600;">你寄的信</span>
   </div>
   ${l ? `
@@ -1321,7 +1369,7 @@ routes.me = () => {
   return `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back()">‹ 返回</div>
   <div style="padding:22px 20px 0 20px;" class="h-title">我的</div>
 
   <div style="margin:18px 20px 0 20px; border:1.5px solid var(--ink); background:var(--paper); position:relative; overflow:hidden; padding:16px;">
@@ -1365,7 +1413,7 @@ routes.me = () => {
 routes.excerpts = () => `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back('study')">‹ 返回</div>
   <div class="pagehead afterback"><div class="h-title" style="font-size:26px;">我的摘录</div></div>
   ${S.excerpts.length
     ? `<div class="rows">${S.excerpts.map(e => `
@@ -1381,7 +1429,7 @@ routes.excerpts = () => `
 routes.orders = () => `
 <div class="page">
   ${capsule()}
-  <div class="back" onclick="history.back()">‹ 返回</div>
+  <div class="back" onclick="App.back('me')">‹ 返回</div>
   <div class="pagehead afterback"><div class="h-title" style="font-size:26px;">订单</div></div>
   ${S.orders.length
     ? `<div class="rows">${S.orders.map(o => `
