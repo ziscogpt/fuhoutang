@@ -97,9 +97,10 @@ function colophon() {
   return `<div class="colophon">内容据《曾国藩全集》专题数据集,逐条可查</div>`;
 }
 
-function serviceBar() {
+function serviceBar(raised) {
+  const cls = raised ? ' class="raised"' : '';
   if (S.svcOpen) {
-    return `<div id="servicebar"><div class="sb-open">
+    return `<div id="servicebar"${cls}><div class="sb-open">
       <div onclick="App.svc('卫生间')">卫生间</div>
       <div onclick="App.svc('寄存')">寄存</div>
       <div onclick="App.svc('饮水')">饮水</div>
@@ -107,7 +108,22 @@ function serviceBar() {
       <div class="sb-fold" onclick="App.svcToggle()">收起</div>
     </div></div>`;
   }
-  return `<div id="servicebar"><div class="sb-closed"><div onclick="App.svcToggle()">服务 ∧</div></div></div>`;
+  return `<div id="servicebar"${cls}><div class="sb-closed"><div onclick="App.svcToggle()">服务 ∧</div></div></div>`;
+}
+
+/* 底部导航:只在顶层四页出现(舆图/首页 · 问先生 · 书房 · 我的)。
+   内容页、出处页、电子书等深层页不出导航,保持沉浸,靠返回退回来路。
+   "问先生"占一格——它是这个产品最特别的东西,不该埋在"问一问"右上角。 */
+function tabBar(cur) {
+  const tabs = [
+    { id: homeRoute(), label: S.mode === 'park' ? '舆图' : '首页' },
+    { id: 'sir', label: '问先生' },
+    { id: 'study', label: '书房' },
+    { id: 'me', label: '我的' },
+  ];
+  if (!tabs.some(t => t.id === cur)) return '';
+  return `<div id="tabbar">${tabs.map(t =>
+    `<div class="${t.id === cur ? 'on' : ''}" onclick="go('${t.id}')">${t.label}</div>`).join('')}</div>`;
 }
 
 /* ───────── 路由 ───────── */
@@ -137,7 +153,9 @@ function render() {
   const name = parts[0];
   const view = routes[name] || routes['map'];
   const app = document.getElementById('app');
-  app.innerHTML = view(parts.slice(1), parseQuery(h)) + serviceBar();
+  const tb = tabBar(name);
+  app.innerHTML = view(parts.slice(1), parseQuery(h)) + serviceBar(!!tb) + tb;
+  if (tb) app.classList.add('tabs'); else app.classList.remove('tabs');
   window.scrollTo(0, 0);
 }
 function parseQuery(h) {
@@ -182,7 +200,7 @@ const App = {
   svcToggle() {
     S.svcOpen = !S.svcOpen; save();
     const sb = document.getElementById('servicebar');
-    if (sb) sb.outerHTML = serviceBar();
+    if (sb) sb.outerHTML = serviceBar(!!document.getElementById('tabbar'));
   },
   svc(k) { toast(DATA.services[k]); },
   call() { toast(`拨打 ${DATA.phone} …`); setTimeout(() => { location.href = 'tel:0738'; }, 400); },
@@ -847,7 +865,7 @@ routes.book = () => {
 
 /* 14 · 问一问 */
 routes.ask = () => `
-<div class="page" style="padding-bottom:0;">
+<div class="page chatpage">
   ${capsule()}
   <div class="back" onclick="App.back()">‹ 返回</div>
   <div class="pagehead afterback">
@@ -855,7 +873,7 @@ routes.ask = () => `
       <div class="h-title" style="font-size:26px;">问一问</div>
       <div style="margin-top:6px; font-size:11px; color:var(--faint);">白话作答 · 句句有出处</div>
     </div>
-    <span style="border:1.5px solid var(--ink); padding:8px 14px; font-size:13px; cursor:pointer; white-space:nowrap;" onclick="go('sir')">换"问先生" →</span>
+    <span style="border:1.5px solid var(--ink); background:var(--paper); padding:8px 14px; font-size:13px; cursor:pointer; white-space:nowrap;" onclick="go('sir')">换"问先生" →</span>
   </div>
   <div id="chatbox" class="chat" style="flex:1; overflow-y:auto;">
     ${chats.qa.length ? chats.qa.join('') : `<div class="chips">${DATA.qaChips.map(c => `<span onclick="App.ask('qa', '${c}')">${c}</span>`).join('')}</div>`}
@@ -869,9 +887,12 @@ routes.ask = () => `
 
 /* 20 · 问先生 */
 routes.sir = () => `
-<div class="page" style="padding-bottom:0;">
+<div class="page chatpage">
   ${capsule()}
-  <div class="back" onclick="App.back('ask')">‹ 回去</div>
+  <div class="back" style="display:flex; justify-content:space-between; align-items:center;">
+    <span onclick="App.back()">‹ 回去</span>
+    <span style="border:1px solid rgba(38,36,29,.45); padding:5px 12px; cursor:pointer;" onclick="go('ask')">换"问一问" →</span>
+  </div>
   <div style="padding:20px 20px 0 20px; display:flex; align-items:center; gap:14px;">
     <div style="width:64px; height:80px; flex:none; border:1.5px solid var(--ink); background:repeating-linear-gradient(0deg, transparent 0 10px, rgba(38,36,29,.12) 10px 11px); display:flex; align-items:center; justify-content:center;">
       <span class="mono" style="font-size:9px; color:var(--mut); text-align:center;">白描<br>坐像</span>

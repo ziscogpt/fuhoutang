@@ -17,9 +17,10 @@ window.scrollTo = () => {};
 window.addEventListener = () => {};
 
 const src = fs.readFileSync('docs/js/data.js', 'utf8') + '\n' + fs.readFileSync('docs/js/app.js', 'utf8')
-  + '\nglobal.__t = { routes, App, DATA, getS: () => S };';
+  + '\nglobal.__t = { routes, App, DATA, tabBar, getS: () => S };';
 eval(src);
 const { routes, App, DATA, getS } = global.__t;
+const navBar = global.__t.tabBar; // 换名字接住:eval 里的函数声明会提升到本作用域,同名 const 会撞
 const S = getS();
 
 const routeNames = Object.keys(routes);
@@ -72,6 +73,16 @@ console.log('— 流转表抽查 —');
   ['03 舆图田字格通往 08 离园态', routes.map([], {}).includes("go('leave')")],
   ['13 电子书有"这一册也能听"→22', routes.book([], {}).includes('这一册也能听')],
   ['20 问先生有"没写过"常驻提示', routes.sir([], {}).includes('不敢替古人妄言')],
+].forEach(([name, ok]) => { if (!ok) fail++; console.log(`  ${ok ? '✓' : '✗'} ${name}`); });
+
+console.log('— 底部导航 —');
+[
+  ['行后:首页出导航,含问先生', navBar('home').includes('问先生') && navBar('home').includes('首页')],
+  ['行后:问先生页自己也在导航上', navBar('sir').includes('class="on"')],
+  ['深层页不出导航(内容页)', navBar('place') === ''],
+  ['深层页不出导航(问一问)', navBar('ask') === ''],
+  ['在园:舆图出导航', (S.mode = 'park', navBar('map').includes('舆图'))],
+  ['在园:行后首页不认作顶层', (navBar('home') === '' ? (S.mode = 'post', true) : (S.mode = 'post', false))],
 ].forEach(([name, ok]) => { if (!ok) fail++; console.log(`  ${ok ? '✓' : '✗'} ${name}`); });
 
 console.log('— 问答引擎 —');
